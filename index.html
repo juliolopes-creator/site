@@ -145,7 +145,7 @@ button:hover { background: var(--btn-hover); }
   </header>
 
   <section class="card">
-    <strong>Atribuição de números</strong>
+    <strong>Atribuição de números (25 cada)</strong>
     <div id="assignmentList" class="meta"></div>
 
     <div class="meta" style="margin-top:10px;">Números do irmão selecionado:</div>
@@ -168,9 +168,9 @@ button:hover { background: var(--btn-hover); }
 </div>
 
 <script>
-// CONFIGURAÇÃO
-const WEBAPP_URL = https://script.google.com/macros/s/AKfycbxsY2oD_4Y8OrxrYosn3RGz7bzs_7KcbiH0CluHmqxYyZj8pA61Aq8BePRCxCVvznG_/exec; // Cole a URL do seu Google Apps Script
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxsY2oD_4Y8OrxrYosn3RGz7bzs_7KcbiH0CluHmqxYyZj8pA61Aq8BePRCxCVvznG_/exec';
 const CSV_PASSWORD = '12345610';
+
 const brothers = [
   'Renato Carlos VM','Cicero Pessoa MI','Robson Porto MM','José Amauri MI','Moesio Carvalho AP',
   'Yuri Emmanuel CM','Renê Carlos AP','Luis Gabriel AP','Francisco Josemar MM','José Hildo MM',
@@ -185,49 +185,49 @@ const totals = document.getElementById('totals');
 const exportArea = document.getElementById('exportArea');
 const assignmentList = document.getElementById('assignmentList');
 
-let data = []; // dados da planilha
+let data = []; 
 
-// Inicializa select de irmãos
-brothers.forEach((b,i)=>{
-  const opt=document.createElement('option'); opt.value=b; opt.textContent=b; sel.appendChild(opt);
+// Inicializa select
+brothers.forEach(b=>{
+  const opt = document.createElement('option'); opt.value=b; opt.textContent=b; sel.appendChild(opt);
 });
 
-// Função para carregar dados do Google Sheets
+// Carrega dados da planilha
 async function loadData() {
   try {
     const res = await fetch(WEBAPP_URL);
     data = await res.json();
     renderForSelected();
     renderTotals();
-  } catch(e) { console.error(e); }
+  } catch(e){ console.error(e); }
 }
 
-// Renderiza números para irmão selecionado
+// Renderiza números do irmão
 function renderForSelected(){
   const irmao = sel.value;
   const myNumbers = data.filter(d=>d.irmao===irmao);
   containerNumbers.innerHTML='';
   myNumbers.forEach(d=>{
-    const el=document.createElement('div');
+    const el = document.createElement('div');
     el.className='num'+(d.status==='Sim'?' sold':'');
     el.textContent=d.numero;
-    el.onclick=()=> toggleNumber(d.numero, d);
+    el.onclick = ()=> toggleNumber(d.numero, d);
     containerNumbers.appendChild(el);
   });
   summary.textContent=`Vendidos por ${irmao}: ${myNumbers.filter(d=>d.status==='Sim').length} / ${myNumbers.length}`;
-  assignmentList.innerHTML = `Total números do irmão: ${myNumbers.length}`;
+  assignmentList.textContent = `Total números do irmão: ${myNumbers.length}`;
 }
 
-// Marca/desmarca número e envia para Google Sheets
+// Marca/desmarca número e envia
 async function toggleNumber(numero, obj){
   const status = obj.status==='Sim'?'Não':'Sim';
   const comprador = status==='Sim'?prompt("Nome do comprador:","")||"":"";  
-  obj.status=status;
-  obj.comprador=comprador;
+  obj.status = status;
+  obj.comprador = comprador;
   try {
-    await fetch(WEBAPP_URL, {
+    await fetch(WEBAPP_URL,{
       method:'POST',
-      body: JSON.stringify({numero, status, comprador}),
+      body: JSON.stringify({numero,status,comprador}),
       headers:{'Content-Type':'application/json'}
     });
     renderForSelected();
@@ -235,19 +235,9 @@ async function toggleNumber(numero, obj){
   } catch(e){ console.error(e); }
 }
 
-// Marca todos números
-function markAll(){
-  const irmao = sel.value;
-  const myNumbers = data.filter(d=>d.irmao===irmao && d.status!=='Sim');
-  myNumbers.forEach(d=>toggleNumber(d.numero,d));
-}
-
-// Desmarca todos
-function unmarkAll(){
-  const irmao = sel.value;
-  const myNumbers = data.filter(d=>d.irmao===irmao && d.status==='Sim');
-  myNumbers.forEach(d=>toggleNumber(d.numero,d));
-}
+// Marcar/desmarcar todos
+function markAll(){ const irmao=sel.value; data.filter(d=>d.irmao===irmao && d.status!=='Sim').forEach(d=>toggleNumber(d.numero,d)); }
+function unmarkAll(){ const irmao=sel.value; data.filter(d=>d.irmao===irmao && d.status==='Sim').forEach(d=>toggleNumber(d.numero,d)); }
 
 // Exportar CSV
 function exportCSV(){
@@ -272,21 +262,21 @@ function renderTotals(){
   });
   const totalVendas = Object.values(totalsByBrother).reduce((a,b)=>a+b,0);
   html+=`<div>Total vendidos: ${totalVendas} / ${data.length}</div>`;
-  for(const b of brothers){
-    html+=`<div class="meta">${b}: ${totalsByBrother[b]||0}</div>`;
-  }
+  for(const b of brothers){ html+=`<div class="meta">${b}: ${totalsByBrother[b]||0}</div>`; }
   totals.innerHTML=html;
 }
 
-// Atualização automática a cada 5s
-setInterval(loadData,5000);
-
-// Evento select
+// Eventos
 sel.addEventListener('change', renderForSelected);
+document.getElementById('btnMarkAll').addEventListener('click', markAll);
+document.getElementById('btnUnmarkAll').addEventListener('click', unmarkAll);
+document.getElementById('btnExport').addEventListener('click', exportCSV);
+
+// Atualização a cada 5 segundos
+setInterval(loadData,5000);
 
 // Inicializa
 loadData();
-
 </script>
 </body>
 </html>
