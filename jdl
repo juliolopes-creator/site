@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Rifa Solidária - Loja Fraternidade de Aracati Nº4789</title>
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial;
+      --primary: #3a6ea5;
+      --secondary: #f0f4fa;
+      --success: #c7f0d8;
+      --success-border: #8ed1a5;
+      --card-bg: #ffffff;
+      --text-light: #555;
+    }
+    body {
+      max-width: 1100px;
+      margin: 18px auto;
+      padding: 18px;
+      background: var(--secondary);
+      color: #222;
+    }
+    header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    h1 {
+      font-size: 20px;
+      margin: 0;
+      color: var(--primary);
+      text-align: center;
+    }
+    .controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    select, button {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid #cfd5e6;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    button {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+    }
+    button:hover {
+      opacity: 0.9;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 16px;
+      margin-top: 16px;
+    }
+    .card {
+      background: var(--card-bg);
+      padding: 14px;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+    .numbers {
+      display: grid;
+      grid-template-columns: repeat(5,1fr);
+      gap: 6px;
+      margin-top: 8px;
+      max-height: 520px;
+      overflow: auto;
+      padding-right: 6px;
+    }
+    .num {
+      padding: 8px;
+      border-radius: 6px;
+      text-align: center;
+      border: 1px solid #d9dce6;
+      cursor: pointer;
+      user-select: none;
+      background: #fafafa;
+      transition: 0.2s;
+    }
+    .num:hover {
+      background: #e9eef6;
+    }
+    .num.sold {
+      background: var(--success);
+      border-color: var(--success-border);
+      text-decoration: line-through;
+      color: #333;
+    }
+    .meta {
+      font-size: 13px;
+      margin-top: 8px;
+      color: var(--text-light);
+    }
+    .footer-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .export-area {
+      white-space: pre-wrap;
+      background: #f9fbff;
+      padding: 8px;
+      border-radius: 6px;
+      margin-top: 8px;
+      font-family: monospace;
+      font-size: 12px;
+      border: 1px solid #dbe1f0;
+    }
+    @media(max-width:880px){
+      .grid{grid-template-columns:1fr;}
+      .numbers{grid-template-columns:repeat(4,1fr);}
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Rifa Solidária — Loja Fraternidade de Aracati Nº4789</h1>
+    <div class="controls">
+      <label class="small">Irmão:</label>
+      <select id="brotherSelect"></select>
+      <button id="btnExport">Exportar CSV</button>
+      <button id="btnShareWA">Enviar WhatsApp</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="card">
+      <strong>Atribuição de números (25 cada)</strong>
+      <div id="assignmentList" class="meta"></div>
+
+      <div style="margin-top:10px">
+        <div class="meta">Números do irmão selecionado:</div>
+        <div id="numbers" class="numbers" aria-live="polite"></div>
+      </div>
+
+      <div class="meta" id="summary"></div>
+      <div class="footer-actions">
+        <button id="btnMarkAll">Marcar todos</button>
+        <button id="btnUnmarkAll">Desmarcar todos</button>
+      </div>
+
+      <div id="exportArea" class="export-area"></div>
+    </section>
+
+    <aside class="card">
+      <strong>Resumo geral</strong>
+      <div id="totals" style="margin-top:8px"></div>
+    </aside>
+  </div>
+
+  <script>
+    const brothers = [
+      'Renato Carlos VM','Cicero Pessoa MI','Robson Porto MM','José Amauri MI','Moesio Carvalho AP',
+      'Yuri Emmanuel CM','Renê Carlos AP','Luis Gabriel AP','Francisco Josemar MM','José Hildo MM',
+      'Georgiano MM','Rafael Barbosa MI','Neidio Bezerra MI','Julio Dantas AP','Rogério Carvalho AP',
+      'Alexandre Castelo MI','Geremias Andrade MM','Ikaro Pessoa MM','João Filho MI','Marcus Vinicius MM'
+    ];
+    const TOTAL = 500, PER = 25;
+    const assignments = brothers.map((b,i)=>{
+      const start = i*PER+1, end = start+PER-1;
+      const nums = Array.from({length:PER},(_,j)=>start+j);
+      return {name:b,start,end,nums};
+    });
+
+    const sel=document.getElementById('brotherSelect'),
+      numbersDiv=document.getElementById('numbers'),
+      summary=document.getElementById('summary'),
+      totals=document.getElementById('totals'),
+      exportArea=document.getElementById('exportArea'),
+      assignmentList=document.getElementById('assignmentList');
+    const KEY='rifa_fraternidade_4789_vendas_v1';
+
+    function loadStorage(){return JSON.parse(localStorage.getItem(KEY)||'{}');}
+    function saveStorage(obj){localStorage.setItem(KEY,JSON.stringify(obj));}
+
+    function init(){
+      brothers.forEach((b,i)=>{
+        const opt=document.createElement('option');opt.value=i;opt.textContent=b;sel.appendChild(opt);
+      });
+      assignmentList.innerHTML=assignments.map(a=>`<div>${a.name}: ${a.start} — ${a.end}</div>`).join('');
+      sel.addEventListener('change',renderForSelected);
+      document.getElementById('btnMarkAll').addEventListener('click',markAll);
+      document.getElementById('btnUnmarkAll').addEventListener('click',unmarkAll);
+      document.getElementById('btnExport').addEventListener('click',exportCSV);
+      document.getElementById('btnShareWA').addEventListener('click',shareWhatsApp);
+      sel.selectedIndex=0;renderForSelected();renderTotals();
+    }
+
+    function renderForSelected(){
+      const idx=+sel.value,assign=assignments[idx],store=loadStorage(),sold=store[assign.name]||[];
+      numbersDiv.innerHTML='';
+      assign.nums.forEach(n=>{
+        const el=document.createElement('div');
+        el.className='num'+(sold.includes(n)?' sold':'');
+        el.textContent=n;el.dataset.num=n;
+        el.onclick=()=>toggleNumber(assign.name,n,el);
+        numbersDiv.appendChild(el);
+      });
+      summary.innerHTML=`Vendidos por <strong>${assign.name}</strong>: ${sold.length} / ${PER}`;
+      exportArea.textContent=`Irmão: ${assign.name}\nNúmeros: ${assign.start} — ${assign.end}\nVendidos: ${sold.length}\nLista: ${sold.join(', ')}`;
+    }
+
+    function toggleNumber(name,num,el){
+      const store=loadStorage();
+      if(!store[name])store[name]=[];
+      const arr=store[name],idx=arr.indexOf(num);
+      if(idx===-1)arr.push(num);else arr.splice(idx,1);
+      arr.sort((a,b)=>a-b);
+      saveStorage(store);
+      el.classList.toggle('sold');
+      renderTotals();renderForSelected();
+    }
+
+    function renderTotals(){
+      const store=loadStorage();
+      const perBrother=assignments.map(a=>({name:a.name,sold:(store[a.name]||[]).length}));
+      const totalSold=perBrother.reduce((s,p)=>s+p.sold,0);
+      let html=`<div>Total vendidos: <strong>${totalSold}</strong> / ${TOTAL}</div><div class="meta">`;
+      perBrother.forEach(p=> html+=`<div>${p.name}: ${p.sold}</div>`);
+      html+='</div>';totals.innerHTML=html;
+    }
+
+    function markAll(){const idx=+sel.value,name=assignments[idx].name,store=loadStorage();store[name]=assignments[idx].nums.slice();saveStorage(store);renderForSelected();renderTotals();}
+    function unmarkAll(){const idx=+sel.value,name=assignments[idx].name,store=loadStorage();store[name]=[];saveStorage(store);renderForSelected();renderTotals();}
+
+    function exportCSV(){
+      const senha = prompt("Digite a senha para exportar CSV:");
+      if(senha!=='12345610'){ alert("Senha incorreta!"); return; }
+
+      const store=loadStorage();let rows=['Nome;Numero_Vendido'];
+      Object.keys(store).forEach(name=>(store[name]||[]).forEach(num=>rows.push(`${name};${num}`)));
+      const csv=rows.join('\n');
+      // trigger download
+      const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');a.href=url;a.download='rifa_vendas.csv';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+      exportArea.textContent=csv;
+    }
+
+    function shareWhatsApp(){
+      const idx=+sel.value,assign=assignments[idx],store=loadStorage(),sold=store[assign.name]||[];
+      const text=`Rifa Loja Fraternidade Aracati Nº4789\nIrmão: ${assign.name}\nVendidos (${sold.length}): ${sold.join(', ')}`;
+      const url='https://wa.me/5585992055389?text='+encodeURIComponent(text);window.open(url,'_blank');
+    }
+    init();
+  </script>
+</body>
+</html>
