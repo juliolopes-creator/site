@@ -145,7 +145,7 @@ button:hover { background: var(--btn-hover); }
   </header>
 
   <section class="card">
-    <strong>Atribuição de números (25 cada)</strong>
+    <strong>Atribuição de números</strong>
     <div id="assignmentList" class="meta"></div>
 
     <div class="meta" style="margin-top:10px;">Números do irmão selecionado:</div>
@@ -168,6 +168,9 @@ button:hover { background: var(--btn-hover); }
 </div>
 
 <script>
+// CONFIGURAÇÃO
+const WEBAPP_URL = https://script.google.com/macros/s/AKfycbxsY2oD_4Y8OrxrYosn3RGz7bzs_7KcbiH0CluHmqxYyZj8pA61Aq8BePRCxCVvznG_/exec; // Cole a URL do seu Google Apps Script
+const CSV_PASSWORD = '12345610';
 const brothers = [
   'Renato Carlos VM','Cicero Pessoa MI','Robson Porto MM','José Amauri MI','Moesio Carvalho AP',
   'Yuri Emmanuel CM','Renê Carlos AP','Luis Gabriel AP','Francisco Josemar MM','José Hildo MM',
@@ -175,87 +178,115 @@ const brothers = [
   'Alexandre Castelo MI','Geremias Andrade MM','Ikaro Pessoa MM','João Filho MI','Marcus Vinicius MM'
 ];
 
-const TOTAL=500, PER=25;
-const assignments = brothers.map((b,i)=>{
-  const start=i*PER+1, end=start+PER-1;
-  const nums=Array.from({length:PER},(_,j)=>start+j);
-  return {name:b,start,end,nums};
+const containerNumbers = document.getElementById('numbers');
+const sel = document.getElementById('brotherSelect');
+const summary = document.getElementById('summary');
+const totals = document.getElementById('totals');
+const exportArea = document.getElementById('exportArea');
+const assignmentList = document.getElementById('assignmentList');
+
+let data = []; // dados da planilha
+
+// Inicializa select de irmãos
+brothers.forEach((b,i)=>{
+  const opt=document.createElement('option'); opt.value=b; opt.textContent=b; sel.appendChild(opt);
 });
 
-const sel=document.getElementById('brotherSelect'),
-      numbersDiv=document.getElementById('numbers'),
-      summary=document.getElementById('summary'),
-      totals=document.getElementById('totals'),
-      exportArea=document.getElementById('exportArea'),
-      assignmentList=document.getElementById('assignmentList');
-
-const KEY='rifa_fraternidade_4789_vendas_v1';
-
-function loadStorage(){return JSON.parse(localStorage.getItem(KEY)||'{}');}
-function saveStorage(obj){localStorage.setItem(KEY,JSON.stringify(obj));}
-
-function init(){
-  brothers.forEach((b,i)=>{
-    const opt=document.createElement('option');opt.value=i;opt.textContent=b;sel.appendChild(opt);
-  });
-  assignmentList.innerHTML=assignments.map(a=>`<div>${a.name}: ${a.start} — ${a.end}</div>`).join('');
-  sel.addEventListener('change',renderForSelected);
-  document.getElementById('btnMarkAll').addEventListener('click',markAll);
-  document.getElementById('btnUnmarkAll').addEventListener('click',unmarkAll);
-  document.getElementById('btnExport').addEventListener('click',exportCSV);
-  sel.selectedIndex=0;renderForSelected();renderTotals();
+// Função para carregar dados do Google Sheets
+async function loadData() {
+  try {
+    const res = await fetch(WEBAPP_URL);
+    data = await res.json();
+    renderForSelected();
+    renderTotals();
+  } catch(e) { console.error(e); }
 }
 
+// Renderiza números para irmão selecionado
 function renderForSelected(){
-  const idx=+sel.value, assign=assignments[idx], store=loadStorage(), sold=store[assign.name]||[];
-  numbersDiv.innerHTML='';
-  assign.nums.forEach(n=>{
+  const irmao = sel.value;
+  const myNumbers = data.filter(d=>d.irmao===irmao);
+  containerNumbers.innerHTML='';
+  myNumbers.forEach(d=>{
     const el=document.createElement('div');
-    el.className='num'+(sold.includes(n)?' sold':'');
-    el.textContent=n; el.dataset.num=n;
-    el.onclick=()=>toggleNumber(assign.name,n,el);
-    numbersDiv.appendChild(el);
+    el.className='num'+(d.status==='Sim'?' sold':'');
+    el.textContent=d.numero;
+    el.onclick=()=> toggleNumber(d.numero, d);
+    containerNumbers.appendChild(el);
   });
-  summary.innerHTML=`Vendidos por <strong>${assign.name}</strong>: ${sold.length} / ${PER}`;
-  exportArea.textContent=`Irmão: ${assign.name}\nNúmeros: ${assign.start} — ${assign.end}\nVendidos: ${sold.length}\nLista: ${sold.join(', ')}`;
+  summary.textContent=`Vendidos por ${irmao}: ${myNumbers.filter(d=>d.status==='Sim').length} / ${myNumbers.length}`;
+  assignmentList.innerHTML = `Total números do irmão: ${myNumbers.length}`;
 }
 
-function toggleNumber(name,num,el){
-  const store=loadStorage();
-  if(!store[name]) store[name]=[];
-  const arr=store[name], idx=arr.indexOf(num);
-  if(idx===-1) arr.push(num); else arr.splice(idx,1);
-  arr.sort((a,b)=>a-b);
-  saveStorage(store);
-  el.classList.toggle('sold');
-  renderTotals(); renderForSelected();
+// Marca/desmarca número e envia para Google Sheets
+async function toggleNumber(numero, obj){
+  const status = obj.status==='Sim'?'Não':'Sim';
+  const comprador = status==='Sim'?prompt("Nome do comprador:","")||"":"";  
+  obj.status=status;
+  obj.comprador=comprador;
+  try {
+    await fetch(WEBAPP_URL, {
+      method:'POST',
+      body: JSON.stringify({numero, status, comprador}),
+      headers:{'Content-Type':'application/json'}
+    });
+    renderForSelected();
+    renderTotals();
+  } catch(e){ console.error(e); }
 }
 
+// Marca todos números
+function markAll(){
+  const irmao = sel.value;
+  const myNumbers = data.filter(d=>d.irmao===irmao && d.status!=='Sim');
+  myNumbers.forEach(d=>toggleNumber(d.numero,d));
+}
+
+// Desmarca todos
+function unmarkAll(){
+  const irmao = sel.value;
+  const myNumbers = data.filter(d=>d.irmao===irmao && d.status==='Sim');
+  myNumbers.forEach(d=>toggleNumber(d.numero,d));
+}
+
+// Exportar CSV
+function exportCSV(){
+  const senha = prompt("Digite a senha para exportar CSV:");
+  if(senha!==CSV_PASSWORD){ alert("Senha incorreta!"); return; }
+  let rows = ['Numero;Status;Irmão;Comprador'];
+  data.forEach(d=>rows.push(`${d.numero};${d.status};${d.irmao};${d.comprador}`));
+  const csv = rows.join('\n');
+  const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='rifa_vendas.csv'; a.click(); URL.revokeObjectURL(url);
+  exportArea.textContent = csv;
+}
+
+// Renderiza resumo geral
 function renderTotals(){
-  const store=loadStorage();
-  const perBrother=assignments.map(a=>({name:a.name,sold:(store[a.name]||[]).length}));
-  const totalSold=perBrother.reduce((s,p)=>s+p.sold,0);
-  let html=`<div>Total vendidos: <strong>${totalSold}</strong> / ${TOTAL}</div>`;
-  perBrother.forEach(p=> html+=`<div class="meta">${p.name}: ${p.sold}</div>`);
+  let html = '';
+  const totalsByBrother = {};
+  data.forEach(d=>{
+    if(!totalsByBrother[d.irmao]) totalsByBrother[d.irmao]=0;
+    if(d.status==='Sim') totalsByBrother[d.irmao]++;
+  });
+  const totalVendas = Object.values(totalsByBrother).reduce((a,b)=>a+b,0);
+  html+=`<div>Total vendidos: ${totalVendas} / ${data.length}</div>`;
+  for(const b of brothers){
+    html+=`<div class="meta">${b}: ${totalsByBrother[b]||0}</div>`;
+  }
   totals.innerHTML=html;
 }
 
-function markAll(){const idx=+sel.value,name=assignments[idx].name,store=loadStorage();store[name]=assignments[idx].nums.slice();saveStorage(store);renderForSelected();renderTotals();}
-function unmarkAll(){const idx=+sel.value,name=assignments[idx].name,store=loadStorage();store[name]=[];saveStorage(store);renderForSelected();renderTotals();}
+// Atualização automática a cada 5s
+setInterval(loadData,5000);
 
-function exportCSV(){
-  const senha = prompt("Digite a senha para exportar CSV:");
-  if(senha!=='12345610'){ alert("Senha incorreta!"); return; }
-  const store=loadStorage();let rows=['Nome;Numero_Vendido'];
-  Object.keys(store).forEach(name=>(store[name]||[]).forEach(num=>rows.push(`${name};${num}`)));
-  const csv=rows.join('\n');
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download='rifa_vendas.csv';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
-  exportArea.textContent=csv;
-}
+// Evento select
+sel.addEventListener('change', renderForSelected);
 
-init();
+// Inicializa
+loadData();
+
 </script>
 </body>
 </html>
